@@ -155,8 +155,7 @@ void Network::schedulePacket(Packet& packet, double startTime) {
     double currentTime = startTime;
     for (size_t i = 1; i < path.size(); ++i) {
         currentTime += getLatencyBetween(path[i - 1], path[i]);
-        eventQueue_.push({currentTime, &packet, path[i]});
-    }
+        eventQueue_.push({currentTime, nextSequence_++, &packet, path[i]});    }
 }
 
 void Network::runSimulation() {

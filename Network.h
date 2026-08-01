@@ -12,14 +12,16 @@ class Packet;
 // Bir olay: "şu zamanda, şu paket, şu cihaza ulaşacak"
 struct Event {
     double time;
+    int sequence;       // eklenme sırası — zamanlar eşitse FIFO garantisi için
     Packet* packet;
     NetworkDevice* target;
 };
 
-// priority_queue'ya "en küçük zaman önce" (min-heap) demenin yolu
+// priority_queue'ya "en küçük zaman önce, eşitlikte önce eklenen önce" demenin yolu
 struct EventComparator {
     bool operator()(const Event& a, const Event& b) const {
-        return a.time > b.time;
+        if (a.time != b.time) return a.time > b.time;
+        return a.sequence > b.sequence;
     }
 };
 
@@ -28,10 +30,10 @@ public:
     void addDevice(std::unique_ptr<NetworkDevice> device);
     void connect(int fromId, int toId, double latency);
 
-    void sendPacket(Packet& packet);   // eski API: anında teslim (tek paket testleri için)
+    void sendPacket(Packet& packet);
 
-    void schedulePacket(Packet& packet, double startTime);  // yeni: olay kuyruğuna ekle
-    void runSimulation();                                    // yeni: kuyruğu zaman sırasıyla işle
+    void schedulePacket(Packet& packet, double startTime);
+    void runSimulation();
 
 private:
     NetworkDevice* findDevice(int id) const;
@@ -48,4 +50,5 @@ private:
     std::unordered_map<NetworkDevice*, std::vector<std::pair<NetworkDevice*, double>>> weightedAdjacency_;
 
     std::priority_queue<Event, std::vector<Event>, EventComparator> eventQueue_;
+    int nextSequence_ = 0;
 };

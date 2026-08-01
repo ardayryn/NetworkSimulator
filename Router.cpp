@@ -11,8 +11,8 @@ Router::Router(int id, const std::string& name)
 void Router::receivePacket(Packet& packet) {
     packet.decreaseTTL();
     if (packet.isExpired()) {
-        std::cout << "Packet expired, dropped at " << getName() << "\n";
-        return;
+        std::cout << getName() << " routing packet: \"" << packet.getPayload() << "\"\n";
+                return;
     }
-    std::cout << getName() << " routing packet\n";
+    std::cout << getName() << " routing packet: \"" << packet.getPayload() << "\"\n"; 
 }

@@ -39,6 +39,8 @@ Gerçek zamanlı ve çoklu paket senaryoları için:
 
 `Event` içindeki `Packet*` bilerek **pointer** (kopya değil): aynı paketin farklı hop'ları için üretilen event'lerin hepsi, TTL gibi durumu paylaşan **tek bir gerçek nesneye** işaret etmeli — kopyalansaydı her event kendi bağımsız TTL'ine sahip olur, mekanizma bozulurdu.
 
+**Eşit zamanlı olaylar (FIFO garantisi):** `priority_queue` sadece `time` değerine göre sıralasaydı, iki event'in zamanı eşit olduğunda hangisinin önce işleneceği C++ standardında tanımsız kalırdı (heap'in iç yapısına bağlı, çalıştırmadan çalıştırmaya değişebilir). Bunu önlemek için her `Event`'e artan bir `sequence` numarası veriliyor (`nextSequence_`); `EventComparator` önce zamana, zamanlar eşitse `sequence`'a bakıyor. Sonuç: eşit zamanlı iki event varsa, **kod akışında önce schedule edilen her zaman önce işlenir** — deterministik, tahmin edilebilir bir sıralama.
+
 ## Derleme
 
 Tüm `.h`/`.cpp` dosyaları aynı klasördeyse:
