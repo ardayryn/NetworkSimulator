@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <utility>
 #include <functional>
+#include <iostream>
 
 void Network::addDevice(std::unique_ptr<NetworkDevice> device) {
     devices_.push_back(std::move(device));
@@ -31,11 +32,9 @@ void Network::connect(int fromId, int toId, double latency) {
 
     edges_.push_back(std::make_unique<Edge>(from, to, latency));
 
-    // adjacency list — çift yönlü (BFS için, ağırlıksız)
     adjacency_[from].push_back(to);
     adjacency_[to].push_back(from);
 
-    // weighted adjacency — çift yönlü (Dijkstra için, latency'li)
     weightedAdjacency_[from].push_back({to, latency});
     weightedAdjacency_[to].push_back({from, latency});
 }
@@ -65,7 +64,7 @@ std::vector<NetworkDevice*> Network::findPath(NetworkDevice* source,
 
     std::vector<NetworkDevice*> path;
     if (destination != source && cameFrom.find(destination) == cameFrom.end()) {
-        return {};   // yol yok
+        return {};
     }
     for (NetworkDevice* at = destination; at != nullptr; ) {
         path.push_back(at);
@@ -78,7 +77,6 @@ std::vector<NetworkDevice*> Network::findPath(NetworkDevice* source,
 
 std::vector<NetworkDevice*> Network::findShortestPathByLatency(NetworkDevice* source,
                                                                 NetworkDevice* destination) {
-    // (mesafe, cihaz) çiftlerini tutan min-heap: her zaman en düşük mesafeli üstte
     std::priority_queue<
         std::pair<double, NetworkDevice*>,
         std::vector<std::pair<double, NetworkDevice*>>,
@@ -97,13 +95,11 @@ std::vector<NetworkDevice*> Network::findShortestPathByLatency(NetworkDevice* so
 
         if (current == destination) break;
 
-        // bayat kayıt kontrolü: bu mesafe artık güncel değilse atla
         if (currentDist > dist[current]) continue;
 
         for (const auto& [neighbor, latency] : weightedAdjacency_[current]) {
             double newDist = currentDist + latency;
 
-            // komşu hiç görülmediyse (dist'te yoksa) ya da daha iyi bir yol bulduysak
             if (dist.find(neighbor) == dist.end() || newDist < dist[neighbor]) {
                 dist[neighbor] = newDist;
                 cameFrom[neighbor] = current;
@@ -114,7 +110,7 @@ std::vector<NetworkDevice*> Network::findShortestPathByLatency(NetworkDevice* so
 
     std::vector<NetworkDevice*> path;
     if (destination != source && cameFrom.find(destination) == cameFrom.end()) {
-        return {};   // yol yok
+        return {};
     }
     for (NetworkDevice* at = destination; at != nullptr; ) {
         path.push_back(at);
@@ -136,5 +132,41 @@ void Network::sendPacket(Packet& packet) {
     for (size_t i = 1; i < path.size(); ++i) {
         path[i]->receivePacket(packet);
         if (packet.isExpired()) return;
+    }
+}
+
+double Network::getLatencyBetween(NetworkDevice* a, NetworkDevice* b) const {
+    auto it = weightedAdjacency_.find(a);
+    if (it == weightedAdjacency_.end()) return 0.0;
+    for (const auto& [neighbor, latency] : it->second) {
+        if (neighbor == b) return latency;
+    }
+    return 0.0;
+}
+
+void Network::schedulePacket(Packet& packet, double startTime) {
+    NetworkDevice* source = findDeviceByName(packet.getSource());
+    NetworkDevice* destination = findDeviceByName(packet.getDestination());
+    if (!source || !destination) return;
+
+    std::vector<NetworkDevice*> path = findShortestPathByLatency(source, destination);
+    if (path.empty()) return;
+
+    double currentTime = startTime;
+    for (size_t i = 1; i < path.size(); ++i) {
+        currentTime += getLatencyBetween(path[i - 1], path[i]);
+        eventQueue_.push({currentTime, &packet, path[i]});
+    }
+}
+
+void Network::runSimulation() {
+    while (!eventQueue_.empty()) {
+        Event event = eventQueue_.top();
+        eventQueue_.pop();
+
+        if (event.packet->isExpired()) continue;
+
+        std::cout << "[t=" << event.time << "] ";
+        event.target->receivePacket(*event.packet);
     }
 }
