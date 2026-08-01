@@ -25,12 +25,12 @@ NetworkDevice* Network::findDeviceByName(const std::string& name) const {
     return nullptr;
 }
 
-void Network::connect(int fromId, int toId, double latency) {
+void Network::connect(int fromId, int toId, double latency, int capacity) {
     NetworkDevice* from = findDevice(fromId);
     NetworkDevice* to   = findDevice(toId);
     if (!from || !to) return;
 
-    edges_.push_back(std::make_unique<Edge>(from, to, latency));
+    edges_.push_back(std::make_unique<Edge>(from, to, latency, capacity));
 
     adjacency_[from].push_back(to);
     adjacency_[to].push_back(from);
@@ -144,6 +144,16 @@ double Network::getLatencyBetween(NetworkDevice* a, NetworkDevice* b) const {
     return 0.0;
 }
 
+Edge* Network::getEdgeBetween(NetworkDevice* a, NetworkDevice* b) const {
+    for (const auto& edge : edges_) {
+        if ((edge->getFrom() == a && edge->getTo() == b) ||
+            (edge->getFrom() == b && edge->getTo() == a)) {
+            return edge.get();
+        }
+    }
+    return nullptr;
+}
+
 void Network::schedulePacket(Packet& packet, double startTime) {
     NetworkDevice* source = findDeviceByName(packet.getSource());
     NetworkDevice* destination = findDeviceByName(packet.getDestination());
@@ -154,8 +164,14 @@ void Network::schedulePacket(Packet& packet, double startTime) {
 
     double currentTime = startTime;
     for (size_t i = 1; i < path.size(); ++i) {
-        currentTime += getLatencyBetween(path[i - 1], path[i]);
-        eventQueue_.push({currentTime, nextSequence_++, &packet, path[i]});    }
+        Edge* edge = getEdgeBetween(path[i - 1], path[i]);
+        if (!edge) return;
+
+        double actualStart = edge->reserveSlot(currentTime);
+        currentTime = actualStart + edge->getLatency();
+
+        eventQueue_.push({currentTime, nextSequence_++, &packet, path[i]});
+    }
 }
 
 void Network::runSimulation() {

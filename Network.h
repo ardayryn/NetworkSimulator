@@ -28,7 +28,7 @@ struct EventComparator {
 class Network {
 public:
     void addDevice(std::unique_ptr<NetworkDevice> device);
-    void connect(int fromId, int toId, double latency);
+    void connect(int fromId, int toId, double latency, int capacity = 1);
 
     void sendPacket(Packet& packet);
 
@@ -43,6 +43,7 @@ private:
     std::vector<NetworkDevice*> findShortestPathByLatency(NetworkDevice* source,
                                                            NetworkDevice* destination);
     double getLatencyBetween(NetworkDevice* a, NetworkDevice* b) const;
+    Edge* getEdgeBetween(NetworkDevice* a, NetworkDevice* b) const;
 
     std::vector<std::unique_ptr<NetworkDevice>> devices_;
     std::vector<std::unique_ptr<Edge>> edges_;
