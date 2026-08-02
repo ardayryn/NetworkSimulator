@@ -1,6 +1,6 @@
 # Network Simulator
 
-C++ ile yazılmış, OOP tasarım prensipleri üzerine kurulu bir ağ simülatörü. BFS ve Dijkstra ile routing, TTL kontrolü, discrete event simulation ile gerçek zamanlı çoklu paket desteği, bant genişliği kısıtı ve olasılıksal paket kaybı/bozulma simülasyonu içerir.
+C++ ile yazılmış, OOP tasarım prensipleri üzerine kurulu bir ağ simülatörü. BFS ve Dijkstra ile routing, TTL kontrolü, discrete event simulation ile gerçek zamanlı çoklu paket desteği, bant genişliği kısıtı, olasılıksal paket kaybı/bozulma simülasyonu ve otomatik retransmission içerir.
 
 ## Mimari
 
@@ -57,20 +57,37 @@ Her `Edge::evaluateTransmission()` çağrısı, `[0,1)` aralığında rastgele b
 
 | Rastgele değer aralığı | Sonuç (`TransmissionOutcome`) | Anlamı |
 |---|---|---|
-| `roll >= 0.8` | `Lost` | Paket kayboldu, yolculuk burada durur |
+| `roll >= 0.8` | `Lost` | Paket kayboldu — retransmission tetiklenir |
 | `0.5 <= roll < 0.8` | `Corrupted` | Veri bozulmuş olabilir, ama iletilmeye devam eder |
 | `0.1 <= roll < 0.5` | `Recoverable` | Veri kurtarılabilir düzeyde, iletilmeye devam eder |
 | `roll < 0.1` | `Intact` | Veri neredeyse eksiksiz iletildi |
 
-Sadece `Lost` durumu paketin yolculuğunu durdurur — diğer üç durumda paket hedefine doğru ilerlemeye devam eder, sadece bir uyarı notu ile. Her hop'ta bu zar bağımsız olarak atılır; aynı paket bir bağlantıda "corrupted" çıkıp bir sonrakinde "lost" olabilir.
+## Retransmission (otomatik yeniden gönderim)
+
+`Lost` sonucu artık paketin yolculuğunu bitirmiyor. `schedulePacket` içindeki bir `while` döngüsü, aynı bağlantıdan **`Lost` olmayan bir sonuç gelene kadar** tekrar tekrar dener:
+
+- Her başarısız deneme bir "Retransmission attempt N failed" notuyla kaydedilir ve **zamana gerçek bir maliyeti** vardır — her deneme, bağlantının latency'si kadar süre ekler (`currentTime` ilerler).
+- Başarılı olunca (Corrupted/Recoverable/Intact), paket yoluna devam eder; birden fazla deneme gerektiyse not "(after N attempts)" ile işaretlenir.
+- Sonsuz döngüye karşı bir güvenlik sınırı var (`maxRetransmissions = 50`). Pratikte `Lost` ihtimali sabit %20 olduğu için bu sınıra ulaşmak istatistiksel olarak neredeyse imkânsızdır — ortalama deneme sayısı 1.25'tir.
+
+Sonuç: artık **hiçbir paket kalıcı olarak kaybolmuyor**, sadece bazı paketler daha geç (birden fazla deneme sonucu) ulaşıyor.
 
 ## Derleme
 
-Tüm `.h`/`.cpp` dosyaları aynı klasördeyse:
+**Basit yöntem (g++):**
 ```bash
 g++ -std=c++17 *.cpp -o network_sim
 ./network_sim
 ```
+
+**CMake ile (önerilen, ölçeklenebilir):**
+```bash
+mkdir build && cd build
+cmake ..
+cmake --build .
+./network_sim
+```
+Kod değiştikçe sadece `cmake --build .` yeterli — `cmake ..` sadece `CMakeLists.txt` değiştiğinde tekrar çalıştırılır. `build/` klasörü `.gitignore`'da, git'e dahil edilmez.
 
 ## Test senaryoları
 
@@ -80,4 +97,6 @@ g++ -std=c++17 *.cpp -o network_sim
 
 **Çoklu paket / gerçek zamanlı simülasyon** — geç başlayan ama kısa yoldan giden bir paket, erken başlayan ama uzun yoldan giden bir paketi geçiyor.
 
-**Bant genişliği** — kapasitesi 1 olan bir bağlantıda, aynı anda gönderilen iki paketten biri diğerinin bitmesini bekliyor:
+**Bant genişliği** — kapasitesi 1 olan bir bağlantıda, aynı anda gönderilen iki paketten biri diğerinin bitmesini bekliyor.
+
+**4 seviyeli transmisyon + retransmission** — 20 paketlik bir denemede, `Lost` çıkan paketler otomatik tekrar denenip sonunda hepsi (20/20) ulaşıyor:

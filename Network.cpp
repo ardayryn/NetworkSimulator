@@ -163,20 +163,38 @@ void Network::schedulePacket(Packet& packet, double startTime) {
     if (path.empty()) return;
 
     double currentTime = startTime;
+    const int maxRetransmissions = 50;   // sonsuz döngüye karşı güvenlik sınırı
+
     for (size_t i = 1; i < path.size(); ++i) {
         Edge* edge = getEdgeBetween(path[i - 1], path[i]);
         if (!edge) return;
 
-        double actualStart = edge->reserveSlot(currentTime);
-        currentTime = actualStart + edge->getLatency();
-
         std::string linkName = path[i - 1]->getName() + " -> " + path[i]->getName();
-        TransmissionOutcome outcome = edge->evaluateTransmission();
 
-        if (outcome == TransmissionOutcome::Lost) {
-            std::string note = "Packet lost on link " + linkName;
-            eventQueue_.push({currentTime, nextSequence_++, &packet, nullptr, note});
-            return;
+        TransmissionOutcome outcome;
+        int attempt = 0;
+
+        // Lost gelirse aynı bağlantıdan tekrar tekrar dene, Lost olmayana kadar
+        while (true) {
+            ++attempt;
+
+            double actualStart = edge->reserveSlot(currentTime);
+            currentTime = actualStart + edge->getLatency();
+
+            outcome = edge->evaluateTransmission();
+
+            if (outcome != TransmissionOutcome::Lost) break;
+
+            std::string retryNote = "Retransmission attempt " + std::to_string(attempt) +
+                                     " failed on link " + linkName + " (packet lost)";
+            eventQueue_.push({currentTime, nextSequence_++, &packet, nullptr, retryNote});
+
+            if (attempt >= maxRetransmissions) {
+                std::string giveUpNote = "Packet permanently lost on link " + linkName +
+                                          " after " + std::to_string(attempt) + " attempts";
+                eventQueue_.push({currentTime, nextSequence_++, &packet, nullptr, giveUpNote});
+                return;
+            }
         }
 
         std::string note;
@@ -192,6 +210,9 @@ void Network::schedulePacket(Packet& packet, double startTime) {
                 break;
             default:
                 break;
+        }
+        if (attempt > 1) {
+            note += " (after " + std::to_string(attempt) + " attempts)";
         }
 
         eventQueue_.push({currentTime, nextSequence_++, &packet, path[i], note});

@@ -16,16 +16,13 @@ int main() {
     net.addDevice(std::move(r1));
     net.addDevice(std::move(pc2));
 
-    net.connect(1, 2, 5.0, 10);
-    net.connect(2, 3, 5.0, 10);
+    net.connect(1, 2, 5.0, 20);
+    net.connect(2, 3, 5.0, 20);
 
-    std::cout << "--- 4 seviyeli transmisyon testi: 12 paket, rastgele sonuclar ---\n";
+    std::cout << "--- Retransmission testi: 20 paket, Lost gelirse tekrar tekrar denenir ---\n";
 
-    // Paketler runSimulation() bitene kadar YASAMASI lazim -- yerel degisken
-    // kullanip pointer verirsek, dongu bitince paket yok olur (dangling pointer!).
-    // Bu yuzden hepsini bir vector<unique_ptr<Packet>> icinde sahiplenip tutuyoruz.
     std::vector<std::unique_ptr<Packet>> packets;
-    for (int i = 1; i <= 12; ++i) {
+    for (int i = 1; i <= 20; ++i) {
         packets.push_back(std::make_unique<Packet>(i, "PC1", "PC2",
                                                      "Paket #" + std::to_string(i), 20));
         net.schedulePacket(*packets.back(), 0.0);
