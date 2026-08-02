@@ -25,12 +25,12 @@ NetworkDevice* Network::findDeviceByName(const std::string& name) const {
     return nullptr;
 }
 
-void Network::connect(int fromId, int toId, double latency, int capacity) {
+void Network::connect(int fromId, int toId, double latency, int capacity, double lossProbability) {
     NetworkDevice* from = findDevice(fromId);
     NetworkDevice* to   = findDevice(toId);
     if (!from || !to) return;
 
-    edges_.push_back(std::make_unique<Edge>(from, to, latency, capacity));
+    edges_.push_back(std::make_unique<Edge>(from, to, latency, capacity, lossProbability));
 
     adjacency_[from].push_back(to);
     adjacency_[to].push_back(from);
@@ -170,7 +170,31 @@ void Network::schedulePacket(Packet& packet, double startTime) {
         double actualStart = edge->reserveSlot(currentTime);
         currentTime = actualStart + edge->getLatency();
 
-        eventQueue_.push({currentTime, nextSequence_++, &packet, path[i]});
+        std::string linkName = path[i - 1]->getName() + " -> " + path[i]->getName();
+        TransmissionOutcome outcome = edge->evaluateTransmission();
+
+        if (outcome == TransmissionOutcome::Lost) {
+            std::string note = "Packet lost on link " + linkName;
+            eventQueue_.push({currentTime, nextSequence_++, &packet, nullptr, note});
+            return;
+        }
+
+        std::string note;
+        switch (outcome) {
+            case TransmissionOutcome::Corrupted:
+                note = "Warning: data may be corrupted on link " + linkName;
+                break;
+            case TransmissionOutcome::Recoverable:
+                note = "Data recovered on link " + linkName;
+                break;
+            case TransmissionOutcome::Intact:
+                note = "Data transmitted almost intact on link " + linkName;
+                break;
+            default:
+                break;
+        }
+
+        eventQueue_.push({currentTime, nextSequence_++, &packet, path[i], note});
     }
 }
 
@@ -181,6 +205,14 @@ void Network::runSimulation() {
 
         if (event.packet->isExpired()) continue;
 
+        if (!event.target) {
+            std::cout << "[t=" << event.time << "] " << event.note << "\n";
+            continue;
+        }
+
+        if (!event.note.empty()) {
+            std::cout << "[t=" << event.time << "] " << event.note << "\n";
+        }
         std::cout << "[t=" << event.time << "] ";
         event.target->receivePacket(*event.packet);
     }

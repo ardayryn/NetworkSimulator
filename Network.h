@@ -10,14 +10,15 @@
 class Packet;
 
 // Bir olay: "şu zamanda, şu paket, şu cihaza ulaşacak"
+// target == nullptr ise, bu bir "kayıp bildirimi" olayıdır (gerçek teslim değil)
 struct Event {
     double time;
-    int sequence;       // eklenme sırası — zamanlar eşitse FIFO garantisi için
+    int sequence;
     Packet* packet;
     NetworkDevice* target;
+    std::string note;
 };
 
-// priority_queue'ya "en küçük zaman önce, eşitlikte önce eklenen önce" demenin yolu
 struct EventComparator {
     bool operator()(const Event& a, const Event& b) const {
         if (a.time != b.time) return a.time > b.time;
@@ -28,7 +29,7 @@ struct EventComparator {
 class Network {
 public:
     void addDevice(std::unique_ptr<NetworkDevice> device);
-    void connect(int fromId, int toId, double latency, int capacity = 1);
+    void connect(int fromId, int toId, double latency, int capacity = 1, double lossProbability = 0.0);
 
     void sendPacket(Packet& packet);
 
